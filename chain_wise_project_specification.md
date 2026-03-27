@@ -50,6 +50,15 @@ ChainWise provides:
 ## 3. Carbon Budget Planner
 - Users define emissions limit
 - System filters feasible routes
+- Optional **max transit time** applies the same way (hard cap on door-to-door hours)
+
+## 3b. Carbon Tax Exposure
+- Users enter a **carbon price** (per tonne CO₂e)
+- System reports **tax liability** for each route option for comparison with emissions and time
+
+## 3c. Transit Time
+- Each leg has a **duration** (from ORS for road, or implied speed for ship/air/rail approximations)
+- **Total journey time** is summed for reporting and optional filtering
 
 ## 4. Satellite-Informed Scoring
 - NO₂ proxy → pollution intensity
@@ -93,6 +102,8 @@ ChainWise provides:
 - Destination factory (address)
 - Cargo weight
 - Carbon budget
+- **Carbon tax** — price per **metric tonne CO₂e** (currency chosen by the user; used to translate emissions into a comparable monetary exposure)
+- **Transit time policy** — optional **maximum door-to-door time** (hours); routes that exceed it are treated as infeasible alongside the carbon budget
 
 ## Pipeline
 1. Geocode factories (ORS)
@@ -101,10 +112,12 @@ ChainWise provides:
    - Airports
 3. Generate route combinations
 4. Compute distances
-5. Compute emissions
-6. Apply penalties (congestion, satellite proxies)
-7. Filter by carbon budget
-8. Rank and recommend
+5. Compute **segment durations** — truck/rail legs from ORS where available; other modes from distance and implied average speeds until finer models exist
+6. Compute emissions
+7. Apply penalties (congestion, satellite proxies)
+8. Compute **carbon tax liability** = (total emissions in t CO₂e) × (tax rate per t CO₂e)
+9. Filter by carbon budget **and** optional max transit time
+10. Rank and recommend (emissions, time, and tax can all surface in ranking — weights TBD)
 
 ---
 
@@ -162,11 +175,12 @@ Emission = distance × weight × air_factor
 
 # 🧠 Scoring & Recommendation
 
-1. Compute total emissions
-2. Normalize across routes
-3. Apply carbon budget filter
-4. Rank feasible routes
-5. Return best route
+1. Compute total emissions and **total door-to-door time** (sum of leg durations)
+2. Compute **carbon tax cost** from total emissions and user-supplied tax rate
+3. Normalize across routes (emissions, time, tax / hybrid score as needed)
+4. Apply carbon budget filter **and** optional max-time filter
+5. Rank feasible routes
+6. Return best route (clear breakdown: kg CO₂e, hours, tax exposure per option)
 
 ---
 
