@@ -58,7 +58,10 @@ export function HomePage() {
 
       {/* Right Map — fills remaining space */}
       <div className="flex-1 h-full relative">
-        <RouteMap route={activeRoute} />
+        <RouteMap
+          route={activeRoute}
+          eeTileUrlTemplate={import.meta.env.VITE_EE_NO2_TILE_TEMPLATE}
+        />
       </div>
 
       {/* Side Dashboard Panel */}
