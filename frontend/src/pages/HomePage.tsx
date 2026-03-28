@@ -78,7 +78,7 @@ function selectedSurfaceModes(form: FormState): Array<'truck' | 'rail'> {
   const modes: Array<'truck' | 'rail'> = []
   if (form.include_truck) modes.push('truck')
   if (form.include_rail) modes.push('rail')
-  return modes.length > 0 ? modes : ['truck']
+  return modes
 }
 
 export function HomePage() {
@@ -502,10 +502,19 @@ export function HomePage() {
               <span className="legend-chip">
                 <i className="legend-swatch legend-air"></i>Air
               </span>
+              <span className="legend-chip ml-2">
+                <i className="legend-origin"></i>Origin
+              </span>
+              <span className="legend-chip">
+                <i className="legend-dest"></i>Dest.
+              </span>
               <span className="legend-chip">
                 <i className="legend-choke"></i>Maritime Hub
               </span>
-              {plannerMode === 'live' && (
+              <span className="legend-chip">
+                <i className="legend-airport"></i>Airport Hub
+              </span>
+              {plannerMode === 'live' && spatialTab === 'map' && (
                 <label className="toggle-pill">
                   <input
                     type="checkbox"
@@ -542,6 +551,7 @@ export function HomePage() {
                     route={convertRouteCandidateToEvaluation(selectedRoute)}
                     planOptions={result.routes.map(convertRouteCandidateToEvaluation)}
                     recommendationId={result.recommendedRoute.routeId}
+                    showNo2Overlay={showNo2Overlay}
                     onSelectPlanOption={(route) => {
                       if (!route.id) return
                       handleSelectRoute(route.id)
@@ -606,6 +616,8 @@ export function HomePage() {
 function convertRouteCandidateToEvaluation(route: RouteCandidate): RouteEvaluation {
   return {
     id: route.routeId,
+    origin_label: route.origin.label,
+    destination_label: route.destination.label,
     total_emissions_kg_co2e: route.totalEmissionsKg,
     total_duration_hours: route.totalDurationHours,
     carbon_tax_cost: route.carbonTaxCost,

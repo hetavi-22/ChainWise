@@ -390,14 +390,19 @@ async def assemble_multimodal_chain(
     dest_lon: float, 
     longhaul_mode: TransportMode,
     weight_kg: float = 1000,
-    first_last_mile_mode: TransportMode = TransportMode.TRUCK
+    allowed_surface_modes: list[TransportMode] | None = None
 ) -> list[list[RouteLeg]]:
     """
     Generate candidate route chains (Truck -> Ship -> Truck, etc.)
     using a smart pre-filter to minimize ORS API calls.
     """
+    if allowed_surface_modes is None:
+        allowed_surface_modes = [TransportMode.TRUCK]
+
     # Road/rail direct corridor: a single real end-to-end leg.
     if longhaul_mode in (TransportMode.TRUCK, TransportMode.RAIL):
+        if longhaul_mode not in allowed_surface_modes:
+            return []
         return [
             [
                 await build_direct_surface_leg(
@@ -409,70 +414,82 @@ async def assemble_multimodal_chain(
                 )
             ]
         ]
+    
+    # Air-only Direct flight? If user unchecked truck, maybe they want this.
+    direct_long_haul = []
+    if longhaul_mode == TransportMode.AIR:
+        lg_geom = generate_great_circle_path(origin_lat, origin_lon, dest_lat, dest_lon)
+        direct_long_haul = [
+            [
+                RouteLeg(
+                    mode=TransportMode.AIR,
+                    distance_km=haversine(origin_lat, origin_lon, dest_lat, dest_lon),
+                    duration_hours=None,
+                    geometry_geojson=lg_geom,
+                    notes="Direct Great Circle Flight (Door-to-Door Proxy)",
+                    origin_hub_name="Origin Contact Point",
+                    origin_hub_lat=origin_lat,
+                    origin_hub_lon=origin_lon,
+                    dest_hub_name="Destination Contact Point",
+                    dest_hub_lat=dest_lat,
+                    dest_hub_lon=dest_lon
+                )
+            ]
+        ]
 
-    # 1. Broad Discovery: Find more candidate hubs (K=5 instead of 2)
+    # 1. Broad Discovery: Find more candidate hubs
     origin_hubs = find_nearest_hubs(origin_lat, origin_lon, longhaul_mode, k=5)
     dest_hubs = find_nearest_hubs(dest_lat, dest_lon, longhaul_mode, k=5)
     
-    # 2. Build fast candidates using Haversine (Local only)
-    pre_candidates: list[list[RouteLeg]] = []
-    for start_hub in origin_hubs:
-        for end_hub in dest_hubs:
-            legs = [
-                RouteLeg(
-                    mode=first_last_mile_mode,
-                    distance_km=haversine(origin_lat, origin_lon, start_hub.lat, start_hub.lon)
-                ),
-                RouteLeg(
-                    mode=longhaul_mode,
-                    distance_km=haversine(start_hub.lat, start_hub.lon, end_hub.lat, end_hub.lon)
-                ),
-                RouteLeg(
-                    mode=first_last_mile_mode,
-                    distance_km=haversine(end_hub.lat, end_hub.lon, dest_lat, dest_lon)
-                )
-            ]
-            pre_candidates.append(legs)
-
-    # 3. Score and Rank: Identify Top Hub Pairs using local math
+    # 2. Score and Rank
     hub_pairs = []
     for s in origin_hubs:
         for e in dest_hubs:
-            # Estimate total distance for ranking
             d_total = haversine(origin_lat, origin_lon, s.lat, s.lon) + \
                       haversine(s.lat, s.lon, e.lat, e.lon) + \
                       haversine(e.lat, e.lon, dest_lat, dest_lon)
             hub_pairs.append((s, e, d_total))
     
-    # Sort by total estimated distance/efficiency
     hub_pairs.sort(key=lambda x: x[2])
-    selected_pairs = hub_pairs[:5]  # Only verify the TOP 5
+    selected_pairs = hub_pairs[:3]
     
     final_candidates = []
+    
+    # Try using the first available surface mode
+    access_mode = allowed_surface_modes[0] if allowed_surface_modes else None
+
     for s, e, _ in selected_pairs:
         fm_dist, fm_dur, fm_geom = (None, None, None)
         lm_dist, lm_dur, lm_geom = (None, None, None)
         
-        # 4. Verified Routing: Only call ORS for road segments of our top selection
-        if first_last_mile_mode == TransportMode.TRUCK:
-            # First Mile
-            fm = await get_ors_route(origin_lat, origin_lon, s.lat, s.lon)
-            if fm: fm_dist, fm_dur, fm_geom = fm
-            
-            # Last Mile
-            lm = await get_ors_route(e.lat, e.lon, dest_lat, dest_lon)
-            if lm: lm_dist, lm_dur, lm_geom = lm
-            
-        # Fallback to local math
-        if fm_dist is None: fm_dist = haversine(origin_lat, origin_lon, s.lat, s.lon)
-        if lm_dist is None: lm_dist = haversine(e.lat, e.lon, dest_lat, dest_lon)
+        # Build multimodal only if we have an access mode or it's super close
+        full_route: list[RouteLeg] = []
         
-        # Geometry fallbacks (Straight lines for first-mile truck)
-        if fm_geom is None:
-            fm_geom = {"type": "LineString", "coordinates": [[origin_lon, origin_lat], [s.lon, s.lat]]}
-        if lm_geom is None:
-            lm_geom = {"type": "LineString", "coordinates": [[e.lon, e.lat], [dest_lon, dest_lat]]}
+        if access_mode:
+            if access_mode == TransportMode.TRUCK:
+                fm = await get_ors_route(origin_lat, origin_lon, s.lat, s.lon)
+                if fm: fm_dist, fm_dur, fm_geom = fm
+                lm = await get_ors_route(e.lat, e.lon, dest_lat, dest_lon)
+                if lm: lm_dist, lm_dur, lm_geom = lm
             
+            if fm_dist is None: fm_dist = haversine(origin_lat, origin_lon, s.lat, s.lon)
+            if lm_dist is None: lm_dist = haversine(e.lat, e.lon, dest_lat, dest_lon)
+            if fm_geom is None:
+                fm_geom = {"type": "LineString", "coordinates": [[origin_lon, origin_lat], [s.lon, s.lat]]}
+            if lm_geom is None:
+                lm_geom = {"type": "LineString", "coordinates": [[e.lon, e.lat], [dest_lon, dest_lat]]}
+
+            full_route.append(RouteLeg(
+                mode=access_mode,
+                distance_km=fm_dist,
+                duration_hours=fm_dur,
+                geometry_geojson=fm_geom,
+                origin_hub_name="Origin Point",
+                dest_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
+                dest_hub_lat=s.lat,
+                dest_hub_lon=s.lon
+            ))
+
         # Professional routing for the main long-haul segment
         longhaul_legs = []
         if longhaul_mode == TransportMode.SHIP:
@@ -481,17 +498,14 @@ async def assemble_multimodal_chain(
             if graph_legs:
                 for idx, gleg in enumerate(graph_legs):
                     dist = haversine(gleg['from_lat'], gleg['from_lon'], gleg['to_lat'], gleg['to_lon'])
-                    # Generate natural curved path for visualization
                     geom = {"type": "LineString", "coordinates": _slerp_segment(gleg['from_lat'], gleg['from_lon'], gleg['to_lat'], gleg['to_lon'])}
-                    
                     countries = ', '.join(gleg['countries']) if gleg['countries'] else 'International Waters'
-                    notes = f"Vessel Position: {gleg['from_name']} → {gleg['to_name']} (Transiting: {countries})"
+                    notes = f"Vessel Transit: {gleg['from_name']} → {gleg['to_name']} ({countries})"
                     
                     longhaul_legs.append(
                         RouteLeg(
                             mode=TransportMode.SHIP,
                             distance_km=dist,
-                            duration_hours=None,
                             geometry_geojson=geom,
                             notes=notes,
                             origin_hub_name=gleg['from_name'] if idx > 0 else f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
@@ -506,7 +520,6 @@ async def assemble_multimodal_chain(
                     )
 
         if not longhaul_legs:
-            # Fallback or AIR routes
             if longhaul_mode == TransportMode.SHIP:
                 lg_geom = {"type": "LineString", "coordinates": _slerp_segment(s.lat, s.lon, e.lat, e.lon)}
                 notes = "Direct Ocean Transit"
@@ -518,7 +531,6 @@ async def assemble_multimodal_chain(
                 RouteLeg(
                     mode=longhaul_mode,
                     distance_km=haversine(s.lat, s.lon, e.lat, e.lon),
-                    duration_hours=None,
                     geometry_geojson=lg_geom,
                     notes=notes,
                     origin_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
@@ -529,34 +541,24 @@ async def assemble_multimodal_chain(
                     dest_hub_lon=e.lon
                 )
             ]
-
-        # Combine all legs dynamically
-        full_route: list[RouteLeg] = []
-        
-        full_route.append(RouteLeg(
-            mode=TransportMode.TRUCK,
-            distance_km=fm_dist,
-            duration_hours=fm_dur,
-            geometry_geojson=fm_geom,
-            origin_hub_name="Origin Factory",
-            dest_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
-            dest_hub_lat=s.lat,
-            dest_hub_lon=s.lon
-        ))
         
         full_route.extend(longhaul_legs)
-        full_route.append(RouteLeg(
-            mode=TransportMode.TRUCK,
-            distance_km=lm_dist,
-            duration_hours=lm_dur,
-            geometry_geojson=lm_geom,
-            origin_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
-            origin_hub_lat=e.lat,
-            origin_hub_lon=e.lon,
-            dest_hub_name="Destination Warehouse"
-        ))
+        
+        if access_mode:
+            full_route.append(RouteLeg(
+                mode=access_mode,
+                distance_km=lm_dist,
+                duration_hours=lm_dur,
+                geometry_geojson=lm_geom,
+                origin_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
+                origin_hub_lat=e.lat,
+                origin_hub_lon=e.lon,
+                dest_hub_name="Destination Point"
+            ))
         
         final_candidates.append(full_route)
+
+    return direct_long_haul + final_candidates
 
     return final_candidates
 

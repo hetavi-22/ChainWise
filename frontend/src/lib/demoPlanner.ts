@@ -594,11 +594,16 @@ function resolveLocation(input: string): ResolvedLocation {
 
   if (scored[0].score <= 0) {
     return {
-      ...LOCATIONS[0],
+      id: 'custom-input',
+      label: input,
+      type: 'Location',
+      aliases: [],
+      lat: 0,
+      lng: 0,
       resolvedFromInput: input,
       matchQuality: 'low',
       resolutionNote:
-        'Demo fallback used because the address was not in the seeded hackathon dataset.',
+        'Using raw user input as geocoding was not possible in the seeded dataset. Backend resolution is recommended.',
     }
   }
 
@@ -657,7 +662,15 @@ function adaptBackendRoute(
   payload: RoutePlanRequest,
 ): RouteCandidate {
   const cargoTonnes = Math.max(payload.cargo_weight_tonnes, 1)
-  const mappedLegs = option.legs.map((leg, legIndex) => adaptApiLeg(leg, legIndex, cargoTonnes))
+  const mappedLegs = option.legs.map((leg, legIndex) =>
+    adaptApiLeg(
+      leg,
+      legIndex,
+      cargoTonnes,
+      legIndex === 0 ? origin.label : undefined,
+      legIndex === option.legs.length - 1 ? destination.label : undefined,
+    ),
+  )
   const originPort =
     resolvePortFromLeg(option.legs[0], 'dest') ?? nearestPorts(origin, 1)[0]
   const destinationPort =
@@ -728,7 +741,13 @@ function adaptBackendRoute(
   }
 }
 
-function adaptApiLeg(leg: ApiRouteLeg, legIndex: number, cargoTonnes: number): RouteLeg {
+function adaptApiLeg(
+  leg: ApiRouteLeg,
+  legIndex: number,
+  cargoTonnes: number,
+  originOverride?: string,
+  destOverride?: string,
+): RouteLeg {
   const coordinates = geometryToCoordinates(leg)
   const distanceKm = Math.max(leg.distance_km, estimatedDistanceFromCoordinates(coordinates))
   const durationHours = leg.duration_hours ?? estimateDurationHours(leg.mode, distanceKm)
@@ -737,14 +756,25 @@ function adaptApiLeg(leg: ApiRouteLeg, legIndex: number, cargoTonnes: number): R
       ? Math.max(leg.emissions_kg_co2e, 0)
       : emissionsForMode(leg.mode, distanceKm, cargoTonnes)
 
+  let fromLabel = leg.origin_hub_name ?? 'Origin'
+  let toLabel = leg.dest_hub_name ?? 'Destination'
+
+  // Precision Override: If we have a user-defined address, use it at the terminals
+  if (originOverride && (fromLabel === 'Origin' || fromLabel === 'Origin Factory')) {
+    fromLabel = originOverride
+  }
+  if (destOverride && (toLabel === 'Destination' || toLabel === 'Destination Warehouse')) {
+    toLabel = destOverride
+  }
+
   return {
     id: `live-leg-${legIndex + 1}`,
     kind: leg.mode === 'ship' ? 'sea' : 'surface',
     mode: leg.mode,
     label: buildApiLegLabel(leg),
     strategy: leg.notes ?? buildApiLegStrategy(leg.mode),
-    fromLabel: leg.origin_hub_name ?? 'Origin',
-    toLabel: leg.dest_hub_name ?? 'Destination',
+    fromLabel,
+    toLabel,
     distanceKm,
     emissionsKg: resolvedEmissionsKg,
     durationHours,

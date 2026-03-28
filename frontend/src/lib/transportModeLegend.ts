@@ -1,9 +1,9 @@
 /** Shared palette for map, globe, and legends (presentation-friendly, slightly brighter). */
 export const MODE_COLOR_HEX: Record<string, string> = {
-  truck: '#22c55e',
-  ship: '#38bdf8',
-  air: '#fb7185',
-  rail: '#fbbf24',
+  truck: '#f43f5e',
+  ship: '#3b82f6',
+  air: '#8b5cf6',
+  rail: '#f59e0b',
 }
 
 export const MODE_LEGEND_ROWS = [

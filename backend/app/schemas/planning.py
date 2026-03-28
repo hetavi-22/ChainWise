@@ -77,6 +77,7 @@ class MultimodalPlanRequest(PlanRequest):
     origin_address: str
     destination_address: str
     longhaul_modes: list[TransportMode] = Field(default_factory=lambda: [TransportMode.SHIP])
+    surface_modes: list[TransportMode] = Field(default_factory=lambda: [TransportMode.TRUCK])
 
 
 class MultimodalPlanResponse(BaseModel):

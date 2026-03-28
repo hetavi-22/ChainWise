@@ -127,7 +127,23 @@ export function RouteMap({ routes = [], selectedRouteId, onSelectRoute, showNo2O
       const marker = createMapMarker(googleMaps, mapRef.current, markerConfig)
       if (!marker) return
 
+      marker.addListener('mouseover', () => {
+        const iw = infoWindowRef.current
+        if (!iw) return
+        iw.setOptions({ disableAutoPan: true })
+        iw.setContent(markerConfig.content)
+        iw.open({
+          map: mapRef.current,
+          anchor: marker,
+        })
+      })
+
+      marker.addListener('mouseout', () => {
+        infoWindowRef.current?.close()
+      })
+
       marker.addListener('click', () => {
+        infoWindowRef.current?.setOptions({ disableAutoPan: false })
         infoWindowRef.current?.setContent(markerConfig.content)
         infoWindowRef.current?.open({
           map: mapRef.current,
@@ -332,6 +348,7 @@ function buildRouteNodes(route: RouteCandidate) {
     scale: number
     showLabel?: boolean
     isChokepoint?: boolean
+    mode?: string
   }[] = [
     {
       title: route.origin.label,
@@ -340,6 +357,7 @@ function buildRouteNodes(route: RouteCandidate) {
       color: '#f3cb72',
       scale: 8,
       showLabel: true,
+      mode: 'origin',
     },
     {
       title: route.destination.label,
@@ -348,56 +366,112 @@ function buildRouteNodes(route: RouteCandidate) {
       color: '#f6947e',
       scale: 8,
       showLabel: true,
+      mode: 'destination',
     },
   ]
 
   route.legs.forEach((leg) => {
-    // Add hub nodes
-    if (leg.originIsChokepoint || leg.mode === 'ship') {
+    // Add hub nodes for Sea and Air transshipments (Origin)
+    if (leg.mode === 'ship' || leg.mode === 'air' || leg.originIsChokepoint) {
       const isChoke = !!leg.originIsChokepoint
+      const isAir = leg.mode === 'air'
       nodes.push({
         title: leg.fromLabel,
-        type: isChoke ? 'Maritime Hub' : 'Maritime Node',
+        type: isAir ? 'Airport Hub' : (isChoke ? 'Maritime Hub' : 'Maritime Node'),
         position: { lat: leg.geometry[0][0], lng: leg.geometry[0][1] },
-        color: '#ff4b2b',
-        scale: isChoke ? 10 : 7,
-        showLabel: isChoke,
+        color: isAir ? '#8b5cf6' : '#ff4b2b',
+        scale: (isChoke || isAir) ? 10 : 7,
+        showLabel: isChoke || isAir,
         isChokepoint: isChoke,
+        mode: leg.mode,
       })
     }
 
-    if (leg.destIsChokepoint) {
+    // Add hub nodes for Sea and Air transshipments (Destination)
+    // This is critical for catching hubs like LAX when the next leg is a truck
+    if (leg.mode === 'ship' || leg.mode === 'air' || leg.destIsChokepoint) {
+      const isChoke = !!leg.destIsChokepoint
+      const isAir = leg.mode === 'air'
       const last = leg.geometry[leg.geometry.length - 1]
       nodes.push({
         title: leg.toLabel,
-        type: 'Maritime Hub',
+        type: isAir ? 'Airport Hub' : 'Maritime Hub',
         position: { lat: last[0], lng: last[1] },
-        color: '#ff4b2b',
-        scale: 10,
-        showLabel: true,
-        isChokepoint: true,
+        color: isAir ? '#8b5cf6' : '#ff4b2b',
+        scale: (isChoke || isAir) ? 10 : 7,
+        showLabel: isChoke || isAir,
+        isChokepoint: isChoke,
+        mode: leg.mode,
       })
     }
   })
 
-  // Deduplicate by position
-  const seen = new Set<string>()
-  const uniqueNodes = nodes.filter((n) => {
-    const key = `${n.position.lat},${n.position.lng}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
+  // Deduplicate by position, prioritizing Hubs over endpoint factories/warehouses
+  const nodePriority = (type: string) => {
+    if (type.includes('Hub')) return 2
+    if (type.includes('Node')) return 1
+    return 0
+  }
+
+  const uniqueNodesMap = new Map<string, typeof nodes[0]>()
+  nodes.forEach((n) => {
+    const key = `${n.position.lat.toFixed(4)},${n.position.lng.toFixed(4)}`
+    const existing = uniqueNodesMap.get(key)
+    if (!existing || nodePriority(n.type) > nodePriority(existing.type)) {
+      uniqueNodesMap.set(key, n)
+    }
   })
 
-  return uniqueNodes.map((node) => ({
-    ...node,
-    content: `
-      <div class="map-tooltip">
-        <strong>${escapeHtml(node.type)}</strong>
-        <div>${escapeHtml(node.title)}</div>
-      </div>
-    `,
-  }))
+  const uniqueNodes = Array.from(uniqueNodesMap.values())
+
+  return uniqueNodes.map((node) => {
+    const parts = node.title.split(',')
+    const country = parts.length > 1 ? parts[parts.length - 1].trim() : ''
+    const primaryName = parts.length > 1 ? parts.slice(0, -1).join(', ').trim() : node.title
+    
+    let badgeColor = '#ff4b2b'
+    if (node.mode === 'origin') badgeColor = '#f3cb72'
+    else if (node.mode === 'destination') badgeColor = '#f6947e'
+    else if (node.mode === 'air') badgeColor = '#8b5cf6'
+
+    return {
+      ...node,
+      content: `
+        <div class="map-tooltip" style="
+          padding:12px 16px;
+          font-family:'Outfit', sans-serif;
+          background:#ffffff;
+          border:1px solid #e2e8f0;
+          border-radius:10px;
+          color:#0f172a;
+          box-shadow:0 15px 30px -10px rgb(0 0 0 / 0.5);
+          text-align:left;
+          min-width:120px;
+          pointer-events:none;
+        ">
+          <div style="font-size:15px;font-weight:700;line-height:1.2;color:#1e293b">${escapeHtml(primaryName)}</div>
+          ${
+            country
+              ? `
+            <div style="
+              display:inline-block;
+              font-size:11px;
+              font-weight:700;
+              color:#ffffff;
+              background:${badgeColor};
+              padding:1px 8px;
+              border-radius:4px;
+              text-transform:uppercase;
+              letter-spacing:1px;
+              margin-top:6px;
+            ">${escapeHtml(country)}</div>
+          `
+              : ''
+          }
+        </div>
+      `,
+    }
+  })
 }
 function collectRouteBounds(route: RouteCandidate) {
   return route.legs.flatMap((leg) => leg.geometry)

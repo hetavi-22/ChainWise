@@ -21,6 +21,15 @@ export type GlobeHubPoint = {
   name: string
   mode: string
   color: string
+  isChokepoint: boolean
+}
+
+export type GlobePath = {
+  id: string
+  path: [number, number][] // [lat, lng]
+  mode: string
+  color: string | string[]
+  dashPhase: number
 }
 
 function legEndpoints(leg: RouteLeg): { start: [number, number]; end: [number, number] } | null {
@@ -46,15 +55,17 @@ function legEndpoints(leg: RouteLeg): { start: [number, number]; end: [number, n
 
 export function buildGlobeArcsAndHubs(route: RouteEvaluation | null): {
   arcs: GlobeArc[]
+  paths: GlobePath[]
   hubs: GlobeHubPoint[]
 } {
-  if (!route?.legs?.length) return { arcs: [], hubs: [] }
+  if (!route?.legs?.length) return { arcs: [], paths: [], hubs: [] }
 
   const arcs: GlobeArc[] = []
+  const paths: GlobePath[] = []
   const hubKey = new Set<string>()
   const hubs: GlobeHubPoint[] = []
 
-  const pushHub = (lat: number, lng: number, name: string, mode: string) => {
+  const pushHub = (lat: number, lng: number, name: string, mode: string, isChokepoint: boolean = false) => {
     const k = `${lat.toFixed(3)},${lng.toFixed(3)}`
     if (hubKey.has(k)) return
     hubKey.add(k)
@@ -64,6 +75,7 @@ export function buildGlobeArcsAndHubs(route: RouteEvaluation | null): {
       name,
       mode,
       color: MODE_COLOR_HEX[mode] ?? '#94a3b8',
+      isChokepoint,
     })
   }
 
@@ -74,27 +86,65 @@ export function buildGlobeArcsAndHubs(route: RouteEvaluation | null): {
     const [eLng, eLat] = ends.end
     const mode = leg.mode
     const label = `${leg.origin_hub_name ?? 'Origin'} → ${leg.dest_hub_name ?? 'Destination'}`
+    const routeId = route.id ?? 'route'
+    const colorGradient = modeArcGradient(mode)
+
+    // Legacy arc
     arcs.push({
-      id: `${route.id ?? 'route'}-leg-${i}`,
+      id: `${routeId}-arc-${i}`,
       startLat: sLat,
       startLng: sLng,
       endLat: eLat,
       endLng: eLng,
       mode,
       label,
-      color: modeArcGradient(mode),
+      color: colorGradient,
+      dashPhase: (i * 0.23 + (sLat + sLng) * 0.001) % 1,
+    })
+
+    // Surface path
+    const coords = leg.geometry_geojson?.coordinates as number[][] | undefined
+    const pathCoords: [number, number][] =
+      coords && coords.length >= 2
+        ? coords.map(([lng, lat]) => [lat, lng])
+        : [[sLat, sLng], [eLat, eLng]]
+
+    paths.push({
+      id: `${routeId}-path-${i}`,
+      path: pathCoords,
+      mode,
+      color: colorGradient,
       dashPhase: (i * 0.23 + (sLat + sLng) * 0.001) % 1,
     })
 
     if (leg.origin_hub_lat != null && leg.origin_hub_lon != null) {
-      pushHub(leg.origin_hub_lat, leg.origin_hub_lon, leg.origin_hub_name ?? 'Hub', leg.mode)
+      pushHub(
+        leg.origin_hub_lat,
+        leg.origin_hub_lon,
+        leg.origin_hub_name ?? 'Hub',
+        leg.mode,
+        leg.origin_is_chokepoint ?? false,
+      )
+    } else {
+      // Fallback: use first geometry vertex if meta is missing
+      pushHub(sLat, sLng, leg.origin_hub_name ?? 'Terminal', leg.mode, leg.origin_is_chokepoint ?? false)
     }
+
     if (leg.dest_hub_lat != null && leg.dest_hub_lon != null) {
-      pushHub(leg.dest_hub_lat, leg.dest_hub_lon, leg.dest_hub_name ?? 'Hub', leg.mode)
+      pushHub(
+        leg.dest_hub_lat,
+        leg.dest_hub_lon,
+        leg.dest_hub_name ?? 'Hub',
+        leg.mode,
+        leg.dest_is_chokepoint ?? false,
+      )
+    } else {
+      // Fallback: use last geometry vertex if meta is missing
+      pushHub(eLat, eLng, leg.dest_hub_name ?? 'Terminal', leg.mode, leg.dest_is_chokepoint ?? false)
     }
   })
 
-  return { arcs, hubs }
+  return { arcs, paths, hubs }
 }
 
 /** First-mile start: first vertex of first leg, else first leg origin hub. */

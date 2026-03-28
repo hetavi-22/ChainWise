@@ -47,8 +47,13 @@ async def post_plan_multimodal(body: MultimodalPlanRequest):
     
     for mode in body.longhaul_modes:
         chains = await assemble_multimodal_chain(
-            origin.lat, origin.lon, dest.lat, dest.lon, longhaul_mode=mode, 
-            weight_kg=body.weight_kg
+            origin.lat,
+            origin.lon,
+            dest.lat,
+            dest.lon,
+            longhaul_mode=mode,
+            weight_kg=body.weight_kg,
+            allowed_surface_modes=body.surface_modes,
         )
         for i, legs in enumerate(chains):
             eval_res = await evaluate_route(

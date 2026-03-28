@@ -148,6 +148,30 @@
   box-shadow: 0 0 0 2px rgba(255, 75, 43, 0.3);
 }
 
+.legend-airport {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+}
+
+.legend-origin {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f3cb72;
+  box-shadow: 0 0 0 2px rgba(243, 203, 114, 0.3);
+}
+
+.legend-dest {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f6947e;
+  box-shadow: 0 0 0 2px rgba(246, 148, 126, 0.3);
+}
+
 .form-grid-time {
   display: flex;
   flex-direction: column;

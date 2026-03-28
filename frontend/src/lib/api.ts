@@ -47,6 +47,8 @@ export type RouteEvaluateRequest = {
 
 export type ApiRouteEvaluation = {
   id?: string | null
+  origin_label?: string
+  destination_label?: string
   legs: ApiRouteLeg[]
   total_emissions_kg_co2e: number
   total_duration_hours: number
