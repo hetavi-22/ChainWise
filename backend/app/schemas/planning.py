@@ -17,8 +17,18 @@ class RouteLeg(BaseModel):
 
     duration_hours: float | None = Field(
         default=None,
-        description="If set (e.g. from ORS), overrides implied duration from distance.",
     )
+    geometry_geojson: dict | None = Field(
+        default=None,
+    )
+    
+    # New: Metadata for markers
+    origin_hub_name: str | None = None
+    dest_hub_name: str | None = None
+    origin_hub_lat: float | None = None
+    origin_hub_lon: float | None = None
+    dest_hub_lat: float | None = None
+    dest_hub_lon: float | None = None
 
 
 class PlanConstraints(BaseModel):
@@ -51,9 +61,23 @@ class RouteEvaluateRequest(PlanRequest):
 
 
 class RouteEvaluation(BaseModel):
+    id: str | None = None
     legs: list[RouteLeg]
     total_emissions_kg_co2e: float
     total_duration_hours: float
     carbon_tax_cost: float
     within_carbon_budget: bool | None = None
     within_time_policy: bool | None = None
+
+
+class MultimodalPlanRequest(PlanRequest):
+    origin_address: str
+    destination_address: str
+    longhaul_modes: list[TransportMode] = Field(default_factory=lambda: [TransportMode.SHIP])
+
+
+class MultimodalPlanResponse(BaseModel):
+    origin: dict | None = None  # {lat, lon, name}
+    destination: dict | None = None
+    options: list[RouteEvaluation]
+    recommendation_id: str | None = None

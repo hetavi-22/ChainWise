@@ -1,26 +1,43 @@
-from app.schemas.planning import PlanConstraints, PlanEconomicInputs, RouteEvaluation, RouteLeg
+from app.schemas.planning import (
+    PlanConstraints,
+    PlanEconomicInputs,
+    RouteEvaluation,
+    RouteLeg,
+)
+from app.services.climatiq import calculate_climatiq_emissions
 from app.services.emissions import emissions_for_leg, linehaul_tax_cost
 from app.services.transport_time import leg_duration_hours, total_transit_hours
 
 
-def evaluate_route(
+async def evaluate_route(
     legs: list[RouteLeg],
     weight_kg: float,
     constraints: PlanConstraints,
     economics: PlanEconomicInputs,
 ) -> RouteEvaluation:
     total_e = 0.0
+    
+    # Attempt Climatiq for the whole chain if enabled
+    climatiq_total = await calculate_climatiq_emissions(legs, weight_kg)
+    
     resolved_legs: list[RouteLeg] = []
     for leg in legs:
-        total_e += emissions_for_leg(leg.mode, leg.distance_km, weight_kg)
+        if climatiq_total is None:
+            # Fallback to local math
+            total_e += emissions_for_leg(leg.mode, leg.distance_km, weight_kg)
+            
         dur = leg_duration_hours(leg)
         resolved_legs.append(
             RouteLeg(
                 mode=leg.mode,
                 distance_km=leg.distance_km,
                 duration_hours=dur,
+                geometry_geojson=leg.geometry_geojson,
             )
         )
+
+    if climatiq_total is not None:
+        total_e = climatiq_total
 
     total_hours = total_transit_hours(resolved_legs)
     tax = linehaul_tax_cost(total_e, economics.carbon_tax_per_tonne_co2e)

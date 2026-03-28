@@ -2,12 +2,13 @@
 
 from app.schemas.planning import TransportMode
 
-# kg CO2e per (km × tonne cargo) — matches example table in chain_wise_project_specification.md
+# kg CO2e per (km × tonne cargo) — Default GLEC-aligned factors (Well-to-Wheel)
+# Reference: GLEC Framework for Logistics Emissions Methodologies
 _EMISSION_FACTOR: dict[TransportMode, float] = {
-    TransportMode.RAIL: 0.5,
-    TransportMode.SHIP: 1.0,
-    TransportMode.TRUCK: 2.5,
-    TransportMode.AIR: 6.0,
+    TransportMode.RAIL: 0.035,   # Avg rail freight
+    TransportMode.SHIP: 0.015,   # Avg container ship (main haul)
+    TransportMode.TRUCK: 0.085,  # Avg heavy articulated truck (50-75% load)
+    TransportMode.AIR: 0.850,    # Avg belly cargo (long haul)
 }
 
 
