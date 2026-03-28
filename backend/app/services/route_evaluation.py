@@ -33,6 +33,12 @@ async def evaluate_route(
                 distance_km=leg.distance_km,
                 duration_hours=dur,
                 geometry_geojson=leg.geometry_geojson,
+                origin_hub_name=leg.origin_hub_name,
+                dest_hub_name=leg.dest_hub_name,
+                origin_hub_lat=leg.origin_hub_lat,
+                origin_hub_lon=leg.origin_hub_lon,
+                dest_hub_lat=leg.dest_hub_lat,
+                dest_hub_lon=leg.dest_hub_lon,
             )
         )
 

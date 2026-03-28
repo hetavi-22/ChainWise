@@ -1,0 +1,17 @@
+{
+  "source": "OECD Maritime Transport CO2 Emissions",
+  "sourceFile": "data/raw/oecd_maritime/OECD_Maritime_Transport_CO2.csv",
+  "generatedAt": "2026-03-27T23:55:06.882854+00:00",
+  "observationCount": 388810,
+  "areasCovered": 211,
+  "vesselCategoryCount": 21,
+  "latestMonthlyPeriod": "2025-12",
+  "latestAnnualPeriod": "2025",
+  "latestMonthlyAllVesselsEstimatedTonnes": 784894900.96,
+  "latestAnnualAllVesselsEstimatedTonnes": 9561110702.75,
+  "frequencyCounts": {
+    "A": 23844,
+    "M": 272212,
+    "Q": 92754
+  }
+}

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.schemas.planning import (
     MultimodalPlanRequest,
     MultimodalPlanResponse,
+    RouteEvaluation,
     RouteEvaluateRequest,
 )
 from app.services.dataset_loader import load_airports_dataset, load_ports_dataset
@@ -62,12 +63,13 @@ async def post_plan_multimodal(body: MultimodalPlanRequest):
         x.total_emissions_kg_co2e
     ))
     
-    rec_id = all_options[0].id if all_options else None
+    top_options = all_options[:5]
+    rec_id = top_options[0].id if top_options else None
     
     return MultimodalPlanResponse(
         origin={"lat": origin.lat, "lon": origin.lon, "name": origin.name},
         destination={"lat": dest.lat, "lon": dest.lon, "name": dest.name},
-        options=all_options,
+        options=top_options,
         recommendation_id=rec_id
     )
 

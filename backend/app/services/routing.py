@@ -368,6 +368,20 @@ async def assemble_multimodal_chain(
     Generate candidate route chains (Truck -> Ship -> Truck, etc.)
     using a smart pre-filter to minimize ORS API calls.
     """
+    # Road/rail direct corridor: a single real end-to-end leg.
+    if longhaul_mode in (TransportMode.TRUCK, TransportMode.RAIL):
+        return [
+            [
+                await build_direct_surface_leg(
+                    origin_lat=origin_lat,
+                    origin_lon=origin_lon,
+                    dest_lat=dest_lat,
+                    dest_lon=dest_lon,
+                    mode=longhaul_mode,
+                )
+            ]
+        ]
+
     # 1. Broad Discovery: Find more candidate hubs (K=5 instead of 2)
     origin_hubs = find_nearest_hubs(origin_lat, origin_lon, longhaul_mode, k=5)
     dest_hubs = find_nearest_hubs(dest_lat, dest_lon, longhaul_mode, k=5)
@@ -474,3 +488,54 @@ async def assemble_multimodal_chain(
         ])
 
     return final_candidates
+
+
+async def build_direct_surface_leg(
+    origin_lat: float,
+    origin_lon: float,
+    dest_lat: float,
+    dest_lon: float,
+    mode: TransportMode,
+) -> RouteLeg:
+    """
+    Build one direct end-to-end surface leg.
+    - truck: ORS driving-hgv (fallback haversine line)
+    - rail: ORS-based corridor proxy + rail mode for emissions/time policy
+    """
+    profile = "driving-hgv"
+    routed = await get_ors_route(origin_lat, origin_lon, dest_lat, dest_lon, profile=profile)
+
+    distance_km: float
+    duration_hours: float | None
+    geometry: dict
+
+    if routed is None:
+        distance_km = haversine(origin_lat, origin_lon, dest_lat, dest_lon)
+        duration_hours = None
+        geometry = {
+            "type": "LineString",
+            "coordinates": [[origin_lon, origin_lat], [dest_lon, dest_lat]],
+        }
+    else:
+        distance_km, duration_hours, geom = routed
+        geometry = geom or {
+            "type": "LineString",
+            "coordinates": [[origin_lon, origin_lat], [dest_lon, dest_lat]],
+        }
+
+    # Rail corridor proxy: keep geometry but apply slower implied movement.
+    if mode == TransportMode.RAIL and duration_hours is not None:
+        duration_hours = duration_hours * 1.25
+
+    return RouteLeg(
+        mode=mode,
+        distance_km=distance_km,
+        duration_hours=duration_hours,
+        geometry_geojson=geometry,
+        origin_hub_name="Origin",
+        origin_hub_lat=origin_lat,
+        origin_hub_lon=origin_lon,
+        dest_hub_name="Destination",
+        dest_hub_lat=dest_lat,
+        dest_hub_lon=dest_lon,
+    )
