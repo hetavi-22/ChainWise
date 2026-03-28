@@ -100,6 +100,8 @@ export type RouteLeg = {
   geometry: Coordinate[]
   isEstimated: boolean
   notes?: string
+  originIsChokepoint?: boolean
+  destIsChokepoint?: boolean
 }
 
 export type RouteCandidate = {
@@ -177,8 +179,8 @@ export type PlannerPreset = {
 }
 
 const CONFIG = {
-  truckFactor: 0.12,
-  railFactor: 0.038,
+  truckFactor: 0.085,
+  railFactor: 0.035,
   shipFactor: 0.015,
   surfaceRouteMultiplier: 1.18,
   ecoSurfaceMultiplier: 1.32,
@@ -750,6 +752,8 @@ function adaptApiLeg(leg: ApiRouteLeg, legIndex: number, cargoTonnes: number): R
     geometry: coordinates,
     isEstimated: leg.mode !== 'truck' || leg.duration_hours == null,
     notes: leg.notes ?? undefined,
+    originIsChokepoint: leg.origin_is_chokepoint,
+    destIsChokepoint: leg.dest_is_chokepoint,
   }
 }
 
@@ -1515,7 +1519,8 @@ function emissionsForMode(mode: RouteLegMode, distanceKm: number, cargoTonnes: n
   if (mode === 'truck') return distanceKm * cargoTonnes * CONFIG.truckFactor
   if (mode === 'rail') return distanceKm * cargoTonnes * CONFIG.railFactor
   if (mode === 'air') return distanceKm * cargoTonnes * 0.85
-  return distanceKm * cargoTonnes * CONFIG.shipFactor
+  if (mode === 'ship') return distanceKm * cargoTonnes * CONFIG.shipFactor
+  return 0
 }
 
 function estimateDurationHours(mode: RouteLegMode | 'air', distanceKm: number) {

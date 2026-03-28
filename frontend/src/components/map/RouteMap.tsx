@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RouteCandidate, RouteLeg } from '../../lib/demoPlanner'
+import { createNo2ImageMapType } from './no2ImageMapType'
+import { GREEN_FREIGHT_DARK_MAP_STYLE } from './googleMapDarkStyle'
 
 type Props = {
-  routes: RouteCandidate[]
-  selectedRouteId: string
-  onSelectRoute: (routeId: string) => void
+  routes?: RouteCandidate[]
+  selectedRouteId?: string | null
+  onSelectRoute?: (routeId: string) => void
+  showNo2Overlay?: boolean
 }
 
 type GoogleMapsWindow = Window & {
@@ -15,9 +18,12 @@ type GoogleMapsWindow = Window & {
 
 let googleMapsScriptPromise: Promise<any> | null = null
 
-export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
-  const selectedRoute =
-    routes.find((route) => route.routeId === selectedRouteId) ?? routes[0]
+export function RouteMap({ routes = [], selectedRouteId, onSelectRoute, showNo2Overlay = false }: Props) {
+  const selectedRoute = useMemo(() => {
+    if (!routes || routes.length === 0) return null
+    return routes.find((route) => route.routeId === selectedRouteId) ?? routes[0]
+  }, [routes, selectedRouteId])
+
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<any>(null)
@@ -27,13 +33,13 @@ export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
     apiKey ? 'loading' : 'missing-key',
   )
 
-  const mapCenter = useMemo(
-    () => ({
+  const mapCenter = useMemo(() => {
+    if (!selectedRoute) return { lat: 20, lng: 0 } // Global view for "plain" start
+    return {
       lat: (selectedRoute.origin.lat + selectedRoute.destination.lat) / 2,
       lng: (selectedRoute.origin.lng + selectedRoute.destination.lng) / 2,
-    }),
-    [selectedRoute],
-  )
+    }
+  }, [selectedRoute])
 
   useEffect(() => {
     if (!apiKey) return
@@ -70,7 +76,7 @@ export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
         fullscreenControl: true,
         gestureHandling: 'greedy',
         backgroundColor: '#07131a',
-        styles: GOOGLE_MAP_STYLES,
+        styles: GREEN_FREIGHT_DARK_MAP_STYLE,
       })
       infoWindowRef.current = new googleMaps.maps.InfoWindow()
     } else {
@@ -87,6 +93,8 @@ export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
     clearOverlays(overlayRef.current)
     overlayRef.current = []
 
+    if (!selectedRoute) return // Plain map mode: just show the base map at default center
+
     routes.forEach((route) => {
       const isSelected = route.routeId === selectedRoute.routeId
 
@@ -99,7 +107,7 @@ export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
         })
 
         polyline.addListener('click', (event: any) => {
-          onSelectRoute(route.routeId)
+          if (onSelectRoute) onSelectRoute(route.routeId)
           openLegInfoWindow(
             googleMaps,
             mapRef.current,
@@ -141,6 +149,27 @@ export function RouteMap({ routes, selectedRouteId, onSelectRoute }: Props) {
       overlayRef.current = []
     }
   }, [])
+
+  useEffect(() => {
+    if (status !== 'ready' || !mapRef.current) return
+    const map = mapRef.current
+    
+    // Clear existing NO2 layer if present
+    const len = map.overlayMapTypes.getLength()
+    for (let i = len - 1; i >= 0; i--) {
+      if (map.overlayMapTypes.getAt(i)?.name === 'NO₂ (Sentinel-5P)') {
+        map.overlayMapTypes.removeAt(i)
+      }
+    }
+
+    if (showNo2Overlay) {
+      const template = import.meta.env.VITE_EE_NO2_TILE_TEMPLATE || 'https://earthengine.googleapis.com/v1/projects/earthengine-public/maps/a8e01083-a91d-4034-ba8f-c0202970a256-427c3ea4559a4bb80ea21051512db207/tiles/{z}/{x}/{y}'
+      if (template) {
+        const layer = createNo2ImageMapType(template)
+        map.overlayMapTypes.push(layer)
+      }
+    }
+  }, [showNo2Overlay, status])
 
   return (
     <div className="google-map-shell">
@@ -235,6 +264,8 @@ function createMapMarker(
     title: string
     color: string
     scale: number
+    showLabel?: boolean
+    isChokepoint?: boolean
   },
 ) {
   const AdvancedMarkerElement = googleMaps?.marker?.AdvancedMarkerElement
@@ -246,7 +277,28 @@ function createMapMarker(
     pin.style.borderRadius = '50%'
     pin.style.background = markerConfig.color
     pin.style.border = '2px solid #07131a'
-    pin.style.boxShadow = '0 0 0 2px rgba(7, 19, 26, 0.25)'
+    pin.style.boxShadow = markerConfig.isChokepoint ? '0 0 10px rgba(255, 75, 43, 0.6)' : '0 0 0 2px rgba(7, 19, 26, 0.25)'
+    pin.style.position = 'relative'
+
+    if (markerConfig.showLabel) {
+      const label = document.createElement('div')
+      label.textContent = markerConfig.title
+      label.style.position = 'absolute'
+      label.style.top = `${size + 6}px`
+      label.style.left = '50%'
+      label.style.transform = 'translateX(-50%)'
+      label.style.whiteSpace = 'nowrap'
+      label.style.background = 'rgba(7, 19, 26, 0.88)'
+      label.style.color = '#fff'
+      label.style.padding = '2px 8px'
+      label.style.borderRadius = '4px'
+      label.style.fontSize = '10px'
+      label.style.fontWeight = 'bold'
+      label.style.border = '1px solid rgba(255, 255, 255, 0.15)'
+      label.style.pointerEvents = 'none'
+      label.style.zIndex = '10'
+      pin.appendChild(label)
+    }
 
     return new AdvancedMarkerElement({
       position: markerConfig.position,
@@ -271,57 +323,73 @@ function createMapMarker(
   })
 }
 
-function collectRouteBounds(route: RouteCandidate) {
-  return route.legs.flatMap((leg) => leg.geometry)
-}
-
 function buildRouteNodes(route: RouteCandidate) {
-  const nodes = [
+  const nodes: {
+    title: string
+    type: string
+    position: { lat: number; lng: number }
+    color: string
+    scale: number
+    showLabel?: boolean
+    isChokepoint?: boolean
+  }[] = [
     {
       title: route.origin.label,
       type: route.origin.type,
       position: { lat: route.origin.lat, lng: route.origin.lng },
       color: '#f3cb72',
-      scale: 7,
-    },
-    {
-      title: route.originPort.name,
-      type: 'Origin port',
-      position: { lat: route.originPort.lat, lng: route.originPort.lng },
-      color: '#8ff3b7',
-      scale: 7,
-    },
-    ...(route.intermediatePort
-      ? [
-          {
-            title: route.intermediatePort.name,
-            type: 'Intermediate port',
-            position: {
-              lat: route.intermediatePort.lat,
-              lng: route.intermediatePort.lng,
-            },
-            color: '#74b6ff',
-            scale: 6,
-          },
-        ]
-      : []),
-    {
-      title: route.destinationPort.name,
-      type: route.intermediatePort ? 'Destination port' : 'Import port',
-      position: { lat: route.destinationPort.lat, lng: route.destinationPort.lng },
-      color: '#55d9c3',
-      scale: 7,
+      scale: 8,
+      showLabel: true,
     },
     {
       title: route.destination.label,
       type: route.destination.type,
       position: { lat: route.destination.lat, lng: route.destination.lng },
       color: '#f6947e',
-      scale: 7,
+      scale: 8,
+      showLabel: true,
     },
   ]
 
-  return nodes.map((node) => ({
+  route.legs.forEach((leg) => {
+    // Add hub nodes
+    if (leg.originIsChokepoint || leg.mode === 'ship') {
+      const isChoke = !!leg.originIsChokepoint
+      nodes.push({
+        title: leg.fromLabel,
+        type: isChoke ? 'Maritime Hub' : 'Maritime Node',
+        position: { lat: leg.geometry[0][0], lng: leg.geometry[0][1] },
+        color: '#ff4b2b',
+        scale: isChoke ? 10 : 7,
+        showLabel: isChoke,
+        isChokepoint: isChoke,
+      })
+    }
+
+    if (leg.destIsChokepoint) {
+      const last = leg.geometry[leg.geometry.length - 1]
+      nodes.push({
+        title: leg.toLabel,
+        type: 'Maritime Hub',
+        position: { lat: last[0], lng: last[1] },
+        color: '#ff4b2b',
+        scale: 10,
+        showLabel: true,
+        isChokepoint: true,
+      })
+    }
+  })
+
+  // Deduplicate by position
+  const seen = new Set<string>()
+  const uniqueNodes = nodes.filter((n) => {
+    const key = `${n.position.lat},${n.position.lng}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  return uniqueNodes.map((node) => ({
     ...node,
     content: `
       <div class="map-tooltip">
@@ -330,6 +398,9 @@ function buildRouteNodes(route: RouteCandidate) {
       </div>
     `,
   }))
+}
+function collectRouteBounds(route: RouteCandidate) {
+  return route.legs.flatMap((leg) => leg.geometry)
 }
 
 function openLegInfoWindow(
@@ -362,12 +433,12 @@ function openLegInfoWindow(
 function getLegStyle(leg: RouteLeg, isSelected: boolean) {
   const strokeColor =
     leg.mode === 'truck'
-      ? '#f6947e'
+      ? '#f43f5e'
       : leg.mode === 'rail'
-        ? '#f3cb72'
+        ? '#f59e0b'
         : leg.mode === 'air'
-          ? '#d9f4ff'
-          : '#74b6ff'
+          ? '#8b5cf6'
+          : '#3b82f6'
 
   if (leg.mode === 'ship') {
     return {
@@ -458,40 +529,4 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#39;')
 }
 
-const GOOGLE_MAP_STYLES = [
-  {
-    elementType: 'geometry',
-    stylers: [{ color: '#0b1d27' }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#91b2ad' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#07131a' }],
-  },
-  {
-    featureType: 'administrative',
-    elementType: 'geometry.stroke',
-    stylers: [{ color: '#18303d' }],
-  },
-  {
-    featureType: 'poi',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [{ color: '#17303b' }],
-  },
-  {
-    featureType: 'transit',
-    stylers: [{ visibility: 'off' }],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [{ color: '#07131a' }],
-  },
-]
+

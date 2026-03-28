@@ -21,6 +21,7 @@ class RouteLeg(BaseModel):
     geometry_geojson: dict | None = Field(
         default=None,
     )
+    notes: str | None = None
     
     # New: Metadata for markers
     origin_hub_name: str | None = None
@@ -29,6 +30,8 @@ class RouteLeg(BaseModel):
     origin_hub_lon: float | None = None
     dest_hub_lat: float | None = None
     dest_hub_lon: float | None = None
+    origin_is_chokepoint: bool = False
+    dest_is_chokepoint: bool = False
 
 
 class PlanConstraints(BaseModel):

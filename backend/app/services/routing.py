@@ -223,6 +223,31 @@ _RED_SEA_S     = (13.5,  43.0)   # South Red Sea
 _SCS_N         = (15.0, 115.0)   # South China Sea northern sector
 _SCS_MID       = (10.0, 113.0)   # South China Sea mid
 
+_WP_INFO = {
+    _SUEZ_ENTRY: ("Suez Canal North", ["Egypt"]),
+    _SUEZ_EXIT: ("Suez Canal South (Bab-el-Mandeb)", ["Egypt", "Djibouti", "Yemen"]),
+    _MALACCA_NW: ("Andaman Sea Approach", ["India (Andaman)"]),
+    _MALACCA: ("Strait of Malacca", ["Singapore", "Malaysia", "Indonesia"]),
+    _PANAMA_ATL: ("Panama Canal (Atlantic)", ["Panama"]),
+    _PANAMA_PAC: ("Panama Canal (Pacific)", ["Panama", "Colombia"]),
+    _CAPE_HOPE: ("Cape of Good Hope", ["South Africa"]),
+    _N_PACIFIC: ("North Pacific Ocean", ["International Waters"]),
+    _INDIA_W_MID: ("Arabian Sea", ["India"]),
+    _INDIA_TIP: ("Indian Ocean", ["Sri Lanka", "India"]),
+    _BAY_BENGAL: ("Bay of Bengal", ["India", "Myanmar", "Bangladesh"]),
+    _ANDAMAN: ("Andaman Sea", ["Thailand", "Myanmar"]),
+    _OMAN_GULF: ("Gulf of Oman", ["Oman", "UAE", "Iran"]),
+    _ARABIAN_MID: ("Arabian Sea", ["International Waters"]),
+    _HORN_AFRICA: ("Horn of Africa", ["Somalia"]),
+    _RED_SEA_S: ("Red Sea", ["Eritrea", "Saudi Arabia", "Yemen"]),
+    _SCS_N: ("South China Sea", ["China", "Vietnam", "Philippines"]),
+    _SCS_MID: ("South China Sea", ["International Waters"]),
+    (50.5, 0.5): ("English Channel", ["United Kingdom", "France"]),
+    (56.0, 3.5): ("North Sea", ["Netherlands", "United Kingdom", "Belgium"]),
+    (45.5, -5.0): ("Bay of Biscay", ["France", "Spain"]),
+    (35.9, -5.6): ("Strait of Gibraltar", ["Spain", "Morocco", "UK (Gibraltar)"]),
+    (39.0, 5.0): ("Western Mediterranean", ["Spain", "Algeria"])
+}
 
 def _slerp_segment(lat1: float, lon1: float, lat2: float, lon2: float, n: int = 30) -> list[list[float]]:
     """Spherical linear interpolation between two points — returns n+1 [lon, lat] coords."""
@@ -266,12 +291,13 @@ def _choose_sea_lane_waypoints(lat1: float, lon1: float, lat2: float, lon2: floa
     dest_in_europe   = -10 < lon2 < 45 and lat2 > 30
 
     # ── Intra-Europe (North Sea / Mediterranean coastal routing) ─────────────
+    _ENGLISH_CHANNEL = (50.5, 0.5)
+    _NORTH_SEA       = (56.0, 3.5)
+    _BISCAY          = (45.5, -5.0)
+    _STRAIT_GIB      = (35.9, -5.6)
+    _WESTERN_MED     = (39.0, 5.0)
+
     if origin_europe and dest_in_europe:
-        _ENGLISH_CHANNEL = (50.5, 0.5)
-        _NORTH_SEA       = (56.0, 3.5)
-        _BISCAY          = (45.5, -5.0)
-        _STRAIT_GIB      = (35.9, -5.6)
-        _WESTERN_MED     = (39.0, 5.0)
         # Northern Europe ports use North Sea
         if lat1 > 48 and lat2 > 48:
             return [_ENGLISH_CHANNEL, _NORTH_SEA] if lon1 < 5 or lon2 < 5 else [_NORTH_SEA]
@@ -295,10 +321,10 @@ def _choose_sea_lane_waypoints(lat1: float, lon1: float, lat2: float, lon2: floa
             if origin_w_india:
                 return [_INDIA_W_MID, _INDIA_TIP, _BAY_BENGAL, _ANDAMAN, _MALACCA_NW, _MALACCA, _SCS_N, _N_PACIFIC]
             return [_MALACCA, _SCS_N, _N_PACIFIC]
-        else:            # US East Coast / Latin America → Suez + Panama
+        else:            # US East Coast / Latin America → Suez + Gibraltar + Panama
             if origin_w_india:
-                return [_OMAN_GULF, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY, _PANAMA_ATL, _PANAMA_PAC]
-            return [_INDIA_TIP, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY, _PANAMA_ATL, _PANAMA_PAC]
+                return [_OMAN_GULF, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY, _WESTERN_MED, _STRAIT_GIB, _PANAMA_ATL, _PANAMA_PAC]
+            return [_INDIA_TIP, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY, _WESTERN_MED, _STRAIT_GIB, _PANAMA_ATL, _PANAMA_PAC]
 
     # ── Americas → Asia ───────────────────────────────────────────────────────
     if origin_americas and dest_in_asia:
@@ -306,24 +332,26 @@ def _choose_sea_lane_waypoints(lat1: float, lon1: float, lat2: float, lon2: floa
             if dest_w_india:
                 return [_N_PACIFIC, _SCS_N, _MALACCA, _MALACCA_NW, _ANDAMAN, _BAY_BENGAL, _INDIA_TIP, _INDIA_W_MID]
             return [_N_PACIFIC, _SCS_N, _MALACCA]
-        else:            # US East Coast / Latin America → Panama + Suez
-            return [_PANAMA_PAC, _PANAMA_ATL, _SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _OMAN_GULF]
+        else:            # US East Coast / Latin America → Panama + Gibraltar + Suez
+            return [_PANAMA_PAC, _PANAMA_ATL, _STRAIT_GIB, _WESTERN_MED, _SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _OMAN_GULF]
 
     # ── Asia → Europe (via Suez) ──────────────────────────────────────────────
     if origin_in_asia and dest_in_europe:
+        eu_approach = [_WESTERN_MED] if lat2 < 43 else [_WESTERN_MED, _STRAIT_GIB, _BISCAY, _ENGLISH_CHANNEL]
         if origin_w_india:
-            return [_OMAN_GULF, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY]
+            return [_OMAN_GULF, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY] + eu_approach
         if origin_se_asia:
-            return [_MALACCA, _MALACCA_NW, _ANDAMAN, _BAY_BENGAL, _INDIA_TIP, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY]
-        return [_INDIA_TIP, _ARABIAN_MID, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY]
+            return [_MALACCA, _MALACCA_NW, _ANDAMAN, _BAY_BENGAL, _INDIA_TIP, _ARABIAN_MID, _HORN_AFRICA, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY] + eu_approach
+        return [_INDIA_TIP, _ARABIAN_MID, _RED_SEA_S, _SUEZ_EXIT, _SUEZ_ENTRY] + eu_approach
 
     # ── Europe → Asia (via Suez) ──────────────────────────────────────────────
     if origin_europe and dest_in_asia:
+        eu_exit = [_WESTERN_MED] if lat1 < 43 else [_ENGLISH_CHANNEL, _BISCAY, _STRAIT_GIB, _WESTERN_MED]
         if dest_w_india:
-            return [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _OMAN_GULF]
+            return eu_exit + [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _OMAN_GULF]
         if dest_se_asia:
-            return [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _INDIA_TIP, _BAY_BENGAL, _ANDAMAN, _MALACCA_NW, _MALACCA]
-        return [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _INDIA_TIP]
+            return eu_exit + [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _INDIA_TIP, _BAY_BENGAL, _ANDAMAN, _MALACCA_NW, _MALACCA]
+        return eu_exit + [_SUEZ_ENTRY, _SUEZ_EXIT, _RED_SEA_S, _HORN_AFRICA, _ARABIAN_MID, _INDIA_TIP]
 
     return []  # Fallback: straight SLERP (short intra-regional route)
 
@@ -446,46 +474,89 @@ async def assemble_multimodal_chain(
             lm_geom = {"type": "LineString", "coordinates": [[e.lon, e.lat], [dest_lon, dest_lat]]}
             
         # Professional routing for the main long-haul segment
+        longhaul_legs = []
         if longhaul_mode == TransportMode.SHIP:
-            longhaul_geom = generate_maritime_path(s.lat, s.lon, e.lat, e.lon)
-        else:
-            # Air routes: use SLERP great circle (clamped, arcs look natural for flights)
-            longhaul_geom = generate_great_circle_path(s.lat, s.lon, e.lat, e.lon)
+            from app.services.maritime_graph import get_maritime_route
+            graph_legs = get_maritime_route(s.lat, s.lon, e.lat, e.lon)
+            if graph_legs:
+                for idx, gleg in enumerate(graph_legs):
+                    dist = haversine(gleg['from_lat'], gleg['from_lon'], gleg['to_lat'], gleg['to_lon'])
+                    # Generate natural curved path for visualization
+                    geom = {"type": "LineString", "coordinates": _slerp_segment(gleg['from_lat'], gleg['from_lon'], gleg['to_lat'], gleg['to_lon'])}
+                    
+                    countries = ', '.join(gleg['countries']) if gleg['countries'] else 'International Waters'
+                    notes = f"Vessel Position: {gleg['from_name']} → {gleg['to_name']} (Transiting: {countries})"
+                    
+                    longhaul_legs.append(
+                        RouteLeg(
+                            mode=TransportMode.SHIP,
+                            distance_km=dist,
+                            duration_hours=None,
+                            geometry_geojson=geom,
+                            notes=notes,
+                            origin_hub_name=gleg['from_name'] if idx > 0 else f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
+                            origin_hub_lat=gleg['from_lat'],
+                            origin_hub_lon=gleg['from_lon'],
+                            dest_hub_name=gleg['to_name'] if idx < len(graph_legs)-1 else f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
+                            dest_hub_lat=gleg['to_lat'],
+                            dest_hub_lon=gleg['to_lon'],
+                            origin_is_chokepoint=gleg.get('from_is_chokepoint', False),
+                            dest_is_chokepoint=gleg.get('to_is_chokepoint', False)
+                        )
+                    )
 
-        final_candidates.append([
-            RouteLeg(
-                mode=TransportMode.TRUCK,
-                distance_km=fm_dist,
-                duration_hours=fm_dur,
-                geometry_geojson=fm_geom,
-                origin_hub_name="Origin Factory",
-                dest_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
-                dest_hub_lat=s.lat,
-                dest_hub_lon=s.lon
-            ),
-            RouteLeg(
-                mode=longhaul_mode,
-                distance_km=haversine(s.lat, s.lon, e.lat, e.lon),
-                duration_hours=None,  # Local math fallback
-                geometry_geojson=longhaul_geom,
-                origin_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
-                origin_hub_lat=s.lat,
-                origin_hub_lon=s.lon,
-                dest_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
-                dest_hub_lat=e.lat,
-                dest_hub_lon=e.lon
-            ),
-            RouteLeg(
-                mode=TransportMode.TRUCK,
-                distance_km=lm_dist,
-                duration_hours=lm_dur,
-                geometry_geojson=lm_geom,
-                origin_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
-                origin_hub_lat=e.lat,
-                origin_hub_lon=e.lon,
-                dest_hub_name="Destination Warehouse"
-            )
-        ])
+        if not longhaul_legs:
+            # Fallback or AIR routes
+            if longhaul_mode == TransportMode.SHIP:
+                lg_geom = {"type": "LineString", "coordinates": _slerp_segment(s.lat, s.lon, e.lat, e.lon)}
+                notes = "Direct Ocean Transit"
+            else:
+                lg_geom = generate_great_circle_path(s.lat, s.lon, e.lat, e.lon)
+                notes = "Direct Great Circle Flight"
+            
+            longhaul_legs = [
+                RouteLeg(
+                    mode=longhaul_mode,
+                    distance_km=haversine(s.lat, s.lon, e.lat, e.lon),
+                    duration_hours=None,
+                    geometry_geojson=lg_geom,
+                    notes=notes,
+                    origin_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
+                    origin_hub_lat=s.lat,
+                    origin_hub_lon=s.lon,
+                    dest_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
+                    dest_hub_lat=e.lat,
+                    dest_hub_lon=e.lon
+                )
+            ]
+
+        # Combine all legs dynamically
+        full_route: list[RouteLeg] = []
+        
+        full_route.append(RouteLeg(
+            mode=TransportMode.TRUCK,
+            distance_km=fm_dist,
+            duration_hours=fm_dur,
+            geometry_geojson=fm_geom,
+            origin_hub_name="Origin Factory",
+            dest_hub_name=f"{s.name} ({s.unlocode})" if hasattr(s, 'unlocode') else s.name,
+            dest_hub_lat=s.lat,
+            dest_hub_lon=s.lon
+        ))
+        
+        full_route.extend(longhaul_legs)
+        full_route.append(RouteLeg(
+            mode=TransportMode.TRUCK,
+            distance_km=lm_dist,
+            duration_hours=lm_dur,
+            geometry_geojson=lm_geom,
+            origin_hub_name=f"{e.name} ({e.unlocode})" if hasattr(e, 'unlocode') else e.name,
+            origin_hub_lat=e.lat,
+            origin_hub_lon=e.lon,
+            dest_hub_name="Destination Warehouse"
+        ))
+        
+        final_candidates.append(full_route)
 
     return final_candidates
 

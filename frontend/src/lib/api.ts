@@ -24,6 +24,8 @@ export type ApiRouteLeg = {
   origin_hub_lon?: number | null
   dest_hub_lat?: number | null
   dest_hub_lon?: number | null
+  origin_is_chokepoint?: boolean
+  dest_is_chokepoint?: boolean
   notes?: string | null
 }
 

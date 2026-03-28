@@ -22,9 +22,9 @@ async def evaluate_route(
     
     resolved_legs: list[RouteLeg] = []
     for leg in legs:
+        leg_e = emissions_for_leg(leg.mode, leg.distance_km, weight_kg)
         if climatiq_total is None:
-            # Fallback to local math
-            total_e += emissions_for_leg(leg.mode, leg.distance_km, weight_kg)
+            total_e += leg_e
             
         dur = leg_duration_hours(leg)
         resolved_legs.append(
@@ -32,13 +32,17 @@ async def evaluate_route(
                 mode=leg.mode,
                 distance_km=leg.distance_km,
                 duration_hours=dur,
+                emissions_kg_co2e=leg_e,
                 geometry_geojson=leg.geometry_geojson,
+                notes=leg.notes,
                 origin_hub_name=leg.origin_hub_name,
                 dest_hub_name=leg.dest_hub_name,
                 origin_hub_lat=leg.origin_hub_lat,
                 origin_hub_lon=leg.origin_hub_lon,
                 dest_hub_lat=leg.dest_hub_lat,
                 dest_hub_lon=leg.dest_hub_lon,
+                origin_is_chokepoint=leg.origin_is_chokepoint,
+                dest_is_chokepoint=leg.dest_is_chokepoint
             )
         )
 
