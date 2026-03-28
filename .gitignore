@@ -33,15 +33,3 @@ frontend/.vite/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-
-# Data (keep small samples only; use LFS or external storage for large files)
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-*.sqlite
-*.db
-
-# Logs
-logs/
-*.log

@@ -73,6 +73,8 @@ ChainWise provides:
 
 # 📊 Data Sources
 
+Canonical **processed** files for routing prototypes live in `data/processed/` (`airports.json`, `ports.json`), built via `scripts/fetch_airports.py` and `scripts/fetch_ports.py` (see `data/README.md`). Replace the default ports feed with **NGA Pub 150 / WPI** when you need an official distribution.
+
 ## 1. World Port Index (WPI)
 - Port coordinates
 - Port characteristics

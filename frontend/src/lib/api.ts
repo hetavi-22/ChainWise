@@ -8,10 +8,17 @@ export async function getHealth(): Promise<{ status: string }> {
 
 export type TransportMode = 'truck' | 'rail' | 'ship' | 'air'
 
-export type RouteLeg = {
+export interface RouteLeg {
   mode: TransportMode
   distance_km: number
-  duration_hours?: number | null
+  duration_hours?: number
+  geometry_geojson?: any
+  origin_hub_name?: string
+  dest_hub_name?: string
+  origin_hub_lat?: number
+  origin_hub_lon?: number
+  dest_hub_lat?: number
+  dest_hub_lon?: number
 }
 
 export type RouteEvaluateRequest = {
@@ -29,6 +36,7 @@ export type RouteEvaluateRequest = {
 }
 
 export type RouteEvaluation = {
+  id?: string | null
   legs: RouteLeg[]
   total_emissions_kg_co2e: number
   total_duration_hours: number
@@ -48,6 +56,42 @@ export async function evaluateRoute(
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || `Evaluate failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export type MultimodalPlanRequest = {
+  origin_address: string
+  destination_address: string
+  weight_kg: number
+  longhaul_modes?: TransportMode[]
+  constraints?: {
+    carbon_budget_kg_co2e?: number | null
+    max_transit_time_hours?: number | null
+  }
+  economics?: {
+    carbon_tax_per_tonne_co2e?: number
+  }
+}
+
+export type MultimodalPlanResponse = {
+  origin: { lat: number; lon: number; name: string } | null
+  destination: { lat: number; lon: number; name: string } | null
+  options: RouteEvaluation[]
+  recommendation_id: string | null
+}
+
+export async function planMultimodal(
+  body: MultimodalPlanRequest,
+): Promise<MultimodalPlanResponse> {
+  const res = await fetch(`${base}/api/routes/plan/multimodal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `Plan failed: ${res.status}`)
   }
   return res.json()
 }
