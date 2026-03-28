@@ -1,7 +1,15 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { PlannerForm } from '../components/input/PlannerForm'
 import { RouteMap } from '../components/map/RouteMap'
-import { type RouteEvaluation, type RouteLeg } from '../lib/api'
+import {
+  type MultimodalPlanResponse,
+  type RouteEvaluation,
+  type RouteLeg,
+} from '../lib/api'
+
+const RouteGlobe = lazy(() =>
+  import('../components/map/RouteGlobe').then((m) => ({ default: m.RouteGlobe })),
+)
 
 // ── GLEC emission factors (kg CO2e / km / tonne) ─────────────────────────────
 const EMISSION_FACTORS: Record<string, number> = {
@@ -40,6 +48,8 @@ export function HomePage() {
   const [activeRoute, setActiveRoute] = useState<RouteEvaluation | null>(null)
   const [dashboardRoute, setDashboardRoute] = useState<RouteEvaluation | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [spatialTab, setSpatialTab] = useState<'map' | 'globe'>('map')
+  const [planSnapshot, setPlanSnapshot] = useState<MultimodalPlanResponse | null>(null)
 
   const handleRouteSelect = (route: RouteEvaluation) => setActiveRoute(route)
 
@@ -53,15 +63,63 @@ export function HomePage() {
     <div className="relative flex h-full">
       {/* Left Planner Sidebar */}
       <div className="w-[340px] shrink-0 h-full overflow-y-auto border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
-        <PlannerForm onRouteSelect={handleRouteSelect} onShowDetails={handleShowDashboard} />
+        <PlannerForm
+          activeRouteId={activeRoute?.id ?? null}
+          onRouteSelect={handleRouteSelect}
+          onShowDetails={handleShowDashboard}
+          onPlanComplete={setPlanSnapshot}
+        />
       </div>
 
-      {/* Right Map — fills remaining space */}
-      <div className="flex-1 h-full relative">
-        <RouteMap
-          route={activeRoute}
-          eeTileUrlTemplate={import.meta.env.VITE_EE_NO2_TILE_TEMPLATE}
-        />
+      {/* Right: 2D map vs 3D globe (react-globe.gl — airline-routes arc pattern) */}
+      <div className="relative flex h-full min-h-0 flex-1 flex-col">
+        <div className="absolute left-3 top-3 z-[800] flex gap-0.5 rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-md backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95">
+          <button
+            type="button"
+            onClick={() => setSpatialTab('map')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              spatialTab === 'map'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            2D map
+          </button>
+          <button
+            type="button"
+            onClick={() => setSpatialTab('globe')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              spatialTab === 'globe'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            3D globe
+          </button>
+        </div>
+        <div className="relative min-h-0 flex-1">
+          {spatialTab === 'map' ? (
+            <RouteMap
+              route={activeRoute}
+              eeTileUrlTemplate={import.meta.env.VITE_EE_NO2_TILE_TEMPLATE}
+            />
+          ) : (
+            <Suspense
+              fallback={
+                <div className="flex h-full w-full items-center justify-center bg-slate-950 text-sm text-slate-500">
+                  Loading globe…
+                </div>
+              }
+            >
+              <RouteGlobe
+                route={activeRoute}
+                planOptions={planSnapshot?.options ?? []}
+                recommendationId={planSnapshot?.recommendation_id ?? null}
+                onSelectPlanOption={setActiveRoute}
+              />
+            </Suspense>
+          )}
+        </div>
       </div>
 
       {/* Side Dashboard Panel */}

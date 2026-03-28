@@ -2,6 +2,7 @@ import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
 import type { MutableRefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type RouteEvaluation, type RouteLeg } from '../../lib/api'
+import { MODE_COLOR_HEX, MODE_LEGEND_ROWS } from '../../lib/transportModeLegend'
 import { initDarkFreightMap } from './mapInitialization'
 import { createNo2ImageMapType } from './no2ImageMapType'
 
@@ -9,13 +10,6 @@ export { drawRoute } from './drawFreightRoute'
 export type { FreightLatLng } from './drawFreightRoute'
 
 const GMAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? ''
-
-const MODE_COLOR: Record<string, string> = {
-  truck: '#10b981',
-  ship: '#0ea5e9',
-  air: '#f43f5e',
-  rail: '#f59e0b',
-}
 
 interface HubInfo {
   lat: number
@@ -165,7 +159,7 @@ export function RouteMap({ route, eeTileUrlTemplate, className = '' }: RouteMapP
 
       path.forEach((p) => bounds.extend(p))
 
-      const color = MODE_COLOR[leg.mode] ?? '#64748b'
+      const color = MODE_COLOR_HEX[leg.mode] ?? '#64748b'
       const isTruck = leg.mode === 'truck' || leg.mode === 'rail'
 
       const polyline = new google.maps.Polyline({
@@ -230,7 +224,7 @@ export function RouteMap({ route, eeTileUrlTemplate, className = '' }: RouteMapP
     infoWindowRef.current = iw
 
     newHubs.forEach((hub) => {
-      const color = MODE_COLOR[hub.mode] ?? '#64748b'
+      const color = MODE_COLOR_HEX[hub.mode] ?? '#64748b'
       const marker = new google.maps.Marker({
         map,
         position: { lat: hub.lat, lng: hub.lon },
@@ -300,15 +294,16 @@ export function RouteMap({ route, eeTileUrlTemplate, className = '' }: RouteMapP
   return (
     <div className={`relative h-full w-full ${className}`}>
       {!mapReady && (
-        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-slate-950/90">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
         </div>
       )}
 
       <div ref={containerRef} className="h-full w-full" />
 
-      <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-2">
-        <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-slate-950/85 px-3 py-2 text-xs text-slate-100 shadow-lg backdrop-blur-sm">
+      {/* Top-right so it stays clear of the 2D/3D tab control (top-left). */}
+      <div className="pointer-events-none absolute right-3 top-3 z-[780] flex max-w-[min(100%,280px)] flex-col items-end gap-2">
+        <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/15 bg-slate-950/90 px-3 py-2 text-xs font-medium text-slate-100 shadow-lg backdrop-blur-sm">
           <input
             type="checkbox"
             className="size-3.5 accent-emerald-400"
@@ -316,30 +311,35 @@ export function RouteMap({ route, eeTileUrlTemplate, className = '' }: RouteMapP
             onChange={onNo2Toggle}
             disabled={!mapReady || !hasTemplate}
           />
-          <span className="font-medium tracking-tight">NO2 Satellite Overlay</span>
+          <span className="tracking-tight">NO₂ satellite overlay</span>
         </label>
         {!hasTemplate && mapReady && (
-          <p className="pointer-events-none max-w-[220px] rounded-md bg-slate-950/75 px-2 py-1 text-[10px] text-slate-400">
-            Set <code className="text-slate-300">VITE_EE_NO2_TILE_TEMPLATE</code> or pass{' '}
-            <code className="text-slate-300">eeTileUrlTemplate</code>.
+          <p className="pointer-events-none rounded-md border border-amber-500/30 bg-slate-950/90 px-2 py-1.5 text-[10px] text-amber-200/90">
+            Add <code className="font-mono text-[9px] text-slate-300">VITE_EE_NO2_TILE_TEMPLATE</code> in{' '}
+            <code className="font-mono text-[9px] text-slate-300">.env</code> for NO₂ tiles.
           </p>
         )}
       </div>
 
       {route && (
-        <div className="pointer-events-none absolute bottom-5 left-4 z-[500] flex items-center gap-4 rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
-          <div className="flex items-center gap-1.5">
-            <div className="h-[3px] w-5 rounded-full" style={{ background: MODE_COLOR.ship }} />
-            <span className="text-[11px] font-semibold text-slate-300">Sea</span>
+        <div className="pointer-events-none absolute bottom-4 left-4 z-[760] max-w-[min(100%,320px)] rounded-xl border border-white/10 bg-slate-950/90 px-3 py-2.5 shadow-lg backdrop-blur-md">
+          <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+            Route line colors
+          </p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+            {MODE_LEGEND_ROWS.map((row) => (
+              <div key={row.mode} className="flex items-center gap-1.5">
+                <span
+                  className="h-2 w-6 shrink-0 rounded-full shadow-sm"
+                  style={{ background: row.color }}
+                />
+                <span className="text-[11px] font-semibold text-slate-200">{row.label}</span>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-1 text-slate-400">
-            <span className="text-[11px]">· · ·</span>
-            <span className="ml-0.5 text-[11px] font-semibold text-slate-300">Truck</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-[3px] w-5 rounded-full" style={{ background: MODE_COLOR.air }} />
-            <span className="text-[11px] font-semibold text-slate-300">Air</span>
-          </div>
+          <p className="mt-2 border-t border-white/10 pt-2 text-[10px] text-slate-500">
+            Dotted segments = road/rail; solid = sea &amp; air legs.
+          </p>
         </div>
       )}
 

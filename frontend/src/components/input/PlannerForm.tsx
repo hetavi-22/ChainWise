@@ -29,9 +29,15 @@ function formatDuration(hours: number): string {
 export function PlannerForm({
   onRouteSelect,
   onShowDetails,
+  onPlanComplete,
+  activeRouteId,
 }: {
   onRouteSelect?: (route: RouteEvaluation) => void
   onShowDetails?: (route: RouteEvaluation) => void
+  /** Fired after a successful multimodal plan so the map/globe can list all options. */
+  onPlanComplete?: (res: MultimodalPlanResponse) => void
+  /** Which route is shown on the map/globe (keeps sidebar in sync with globe picker). */
+  activeRouteId?: string | null
 }) {
   const [result, setResult] = useState<MultimodalPlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +45,6 @@ export function PlannerForm({
   const [selectedModes, setSelectedModes] = useState<TransportMode[]>([
     'ship',
   ])
-  const [activeRoute, setActiveRoute] = useState<RouteEvaluation | null>(null)
 
   const toggleMode = (m: TransportMode) => {
     setSelectedModes((prev) =>
@@ -96,6 +101,7 @@ export function PlannerForm({
             economics: { carbon_tax_per_tonne_co2e: tax },
           })
           setResult(res)
+          onPlanComplete?.(res)
 
           if (res.options.length > 0 && onRouteSelect) {
             const rec =
@@ -228,9 +234,12 @@ export function PlannerForm({
               key={opt.id}
               result={opt}
               isRecommended={opt.id === result.recommendation_id}
-              isActive={opt.id === activeRoute?.id}
-              onSelect={() => { onRouteSelect?.(opt); setActiveRoute(opt) }}
-              onShowDetails={() => { onRouteSelect?.(opt); setActiveRoute(opt); onShowDetails?.(opt) }}
+              isActive={opt.id === activeRouteId}
+              onSelect={() => onRouteSelect?.(opt)}
+              onShowDetails={() => {
+                onRouteSelect?.(opt)
+                onShowDetails?.(opt)
+              }}
             />
           ))}
         </div>

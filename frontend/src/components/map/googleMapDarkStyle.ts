@@ -1,6 +1,6 @@
 /**
  * High-contrast dark basemap: keeps roads/regions readable while letting
- * bright overlays (NO₂, neon routes) pop. POI clutter reduced.
+ * bright overlays (NO₂, route lines) stand out. POI clutter reduced.
  */
 export const GREEN_FREIGHT_DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#0c1224' }] },
